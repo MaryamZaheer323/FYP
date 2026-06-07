@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "48939184909",
-    "project_id": "disasterwatch-7082c",
-    "storage_bucket": "disasterwatch-7082c.firebasestorage.app"
+    "project_number": "1076670493168",
+    "project_id": "disaster-watch-2c971",
+    "storage_bucket": "disaster-watch-2c971.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:48939184909:android:666b8542cf56b6332fb644",
+        "mobilesdk_app_id": "1:1076670493168:android:b4e3326e1e65e51b656d35",
         "android_client_info": {
           "package_name": "com.example.disaster_watch"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD41ek4VZo4sPTU0b44jsD8LUiNze3w4rg"
+          "current_key": "AIzaSyAAXhbuA1_Vakh5nF48XLxr9Zvta0K1Cx8"
         }
       ],
       "services": {
