@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:disaster_watch/service/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -22,7 +23,8 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _departmentController = TextEditingController();
   final TextEditingController _rankController = TextEditingController();
   final TextEditingController _badgeController = TextEditingController();
@@ -31,7 +33,7 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
   final TextEditingController _joiningDateController = TextEditingController();
 
   // Files storage
-  final Map<String, XFile?> _files = {
+  final Map<String, File?> _files = {
     'scannedCNIC': null,
     'policeIDCardFront': null,
     'policeIDCardBack': null,
@@ -44,7 +46,7 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
       final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
       if (file != null) {
         setState(() {
-          _files[fileType] = file;
+          _files[fileType] = File(file.path);
         });
         _showMessage('Success', 'File uploaded successfully ✅');
       }
@@ -65,10 +67,7 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        contentTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-        ),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -82,32 +81,49 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
     );
   }
 
-  void _register() {
+  final FirestoreService _firestoreService = FirestoreService();
+  bool _isLoading = false;
+  // Update the _register method in PoliceSignupScreen
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
-      // Collect all user data
-      final userData = {
-        'name': _nameController.text.trim(),
-        'fatherName': _fatherNameController.text.trim(),
-        'dateOfBirth': _dobController.text.trim(),
-        'cnic': _cnicController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim(),
-        'department': _departmentController.text.trim(),
-        'rank': _rankController.text.trim(),
-        'badgeNumber': _badgeController.text.trim(),
-        'serviceId': _serviceIdController.text.trim(),
-        'station': _stationController.text.trim(),
-        'joiningDate': _joiningDateController.text.trim(),
-        'role': 'POLICE OFFICER',
-      };
+      setState(() => _isLoading = true);
+      try {
+        final userData = {
+          'name': _nameController.text.trim(),
+          'fatherName': _fatherNameController.text.trim(),
+          'dateOfBirth': _dobController.text.trim(),
+          'cnic': _cnicController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+          'department': _departmentController.text.trim(),
+          'rank': _rankController.text.trim(),
+          'badgeNumber': _badgeController.text.trim(),
+          'serviceId': _serviceIdController.text.trim(),
+          'station': _stationController.text.trim(),
+          'joiningDate': _joiningDateController.text.trim(),
+          'role': 'POLICE OFFICER',
+        };
 
-      // Navigate to PoliceDashboard with user data
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PoliceDashboard(userData: userData),
-        ),
-      );
+        await _firestoreService.registerPoliceOfficer(userData, _files);
+
+        _showMessage(
+          'Success',
+          'Registration successful! Please wait for admin approval.',
+        );
+
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        });
+      } catch (e) {
+        _showMessage('Error', e.toString());
+      } finally {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -121,7 +137,8 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
 
     if (picked != null) {
       setState(() {
-        controller.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        controller.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
       });
     }
   }
@@ -136,7 +153,8 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
 
     DateTime today = DateTime.now();
     int age = today.year - birthYear;
-    if (today.month < birthMonth || (today.month == birthMonth && today.day < birthDay)) {
+    if (today.month < birthMonth ||
+        (today.month == birthMonth && today.day < birthDay)) {
       age--;
     }
     return age;
@@ -150,11 +168,7 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.black,
-              Color(0xFF0A0E21),
-              Color(0xFF1A1A2E),
-            ],
+            colors: [Colors.black, Color(0xFF0A0E21), Color(0xFF1A1A2E)],
           ),
         ),
         child: SingleChildScrollView(
@@ -162,7 +176,10 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
             children: [
               Container(
                 margin: const EdgeInsets.only(top: 40, left: 20, right: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -347,7 +364,9 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
                           if (!RegExp(r'(?=.*[0-9])').hasMatch(value)) {
                             return 'Password must contain at least one number (0-9)';
                           }
-                          if (!RegExp(r'(?=.*[!@#$%^&*(),.?":{}|<>])').hasMatch(value)) {
+                          if (!RegExp(
+                            r'(?=.*[!@#$%^&*(),.?":{}|<>])',
+                          ).hasMatch(value)) {
                             return 'Password must contain at least one special character (!@#\$%^&*)';
                           }
                           return null;
@@ -489,33 +508,66 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
 
                       const SizedBox(height: 20),
 
-                      _buildFileUploadCard('Scanned CNIC', 'scannedCNIC', Icons.credit_card),
-                      _buildFileUploadCard('Police ID Card (Front)', 'policeIDCardFront', Icons.badge),
-                      _buildFileUploadCard('Police ID Card (Back)', 'policeIDCardBack', Icons.badge),
-                      _buildFileUploadCard('Appointment/Service Letter', 'appointmentLetter', Icons.description),
-                      _buildFileUploadCard('Recent Photograph', 'recentPhotograph', Icons.camera_alt),
+                      _buildFileUploadCard(
+                        'Scanned CNIC',
+                        'scannedCNIC',
+                        Icons.credit_card,
+                      ),
+                      _buildFileUploadCard(
+                        'Police ID Card (Front)',
+                        'policeIDCardFront',
+                        Icons.badge,
+                      ),
+                      _buildFileUploadCard(
+                        'Police ID Card (Back)',
+                        'policeIDCardBack',
+                        Icons.badge,
+                      ),
+                      _buildFileUploadCard(
+                        'Appointment/Service Letter',
+                        'appointmentLetter',
+                        Icons.description,
+                      ),
+                      _buildFileUploadCard(
+                        'Recent Photograph',
+                        'recentPhotograph',
+                        Icons.camera_alt,
+                      ),
 
                       const SizedBox(height: 40),
 
                       Center(
                         child: ElevatedButton(
-                          onPressed: _register,
+                          onPressed: _isLoading ? null : _register,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent,
+                            backgroundColor: Colors
+                                .deepOrange, // Change color as per your theme
                             foregroundColor: Colors.white,
-                            minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
+                            minimumSize: Size(
+                              MediaQuery.of(context).size.width * 0.6,
+                              50,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
                             elevation: 5,
                           ),
-                          child: const Text(
-                            'REGISTER',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'REGISTER',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
 
@@ -581,30 +633,27 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
           isUploaded ? Icons.check_circle : icon,
           color: isUploaded ? Colors.green : Colors.blueAccent,
         ),
-        title: Text(
-          title,
-          style: const TextStyle(color: Colors.white),
-        ),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
         subtitle: isUploaded
             ? Text(
-          fileName,
-          style: const TextStyle(color: Colors.green),
-          overflow: TextOverflow.ellipsis,
-        )
+                fileName,
+                style: const TextStyle(color: Colors.green),
+                overflow: TextOverflow.ellipsis,
+              )
             : const Text(
-          'Tap to upload image',
-          style: TextStyle(color: Colors.white70),
-        ),
+                'Tap to upload image',
+                style: TextStyle(color: Colors.white70),
+              ),
         trailing: isUploaded
             ? IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () {
-            setState(() {
-              _files[fileKey] = null;
-            });
-            _showMessage('Deleted', 'File removed successfully');
-          },
-        )
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () {
+                  setState(() {
+                    _files[fileKey] = null;
+                  });
+                  _showMessage('Deleted', 'File removed successfully');
+                },
+              )
             : null,
         onTap: () => _pickFile(fileKey),
       ),

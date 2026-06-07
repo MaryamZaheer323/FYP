@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:disaster_watch/service/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -8,30 +9,58 @@ class FireBrigadeSignupScreen extends StatefulWidget {
   const FireBrigadeSignupScreen({super.key});
 
   @override
-  State<FireBrigadeSignupScreen> createState() => _FireBrigadeSignupScreenState();
+  State<FireBrigadeSignupScreen> createState() =>
+      _FireBrigadeSignupScreenState();
 }
 
 class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _fatherNameController = TextEditingController();
-  final TextEditingController _dobController = TextEditingController();
-  final TextEditingController _cnicController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _departmentController = TextEditingController();
-  final TextEditingController _rankController = TextEditingController();
-  final TextEditingController _badgeController = TextEditingController();
-  final TextEditingController _serviceIdController = TextEditingController();
-  final TextEditingController _stationController = TextEditingController();
-  final TextEditingController _joiningDateController = TextEditingController();
+final TextEditingController _nameController =
+    TextEditingController(text: "Ali Ahmed");
+
+final TextEditingController _fatherNameController =
+    TextEditingController(text: "Muhammad Iqbal");
+
+final TextEditingController _dobController =
+    TextEditingController();
+
+final TextEditingController _cnicController =
+    TextEditingController(text: "3520212345671");
+
+final TextEditingController _phoneController =
+    TextEditingController(text: "03011234567");
+
+final TextEditingController _emailController =
+    TextEditingController(text: "maryam1@firebrigade.gov.pk");
+
+final TextEditingController _passwordController =
+    TextEditingController(text: "Younis@ns2828");
+
+final TextEditingController _confirmPasswordController =
+    TextEditingController(text: "Younis@ns2828");
+
+final TextEditingController _departmentController =
+    TextEditingController(text: "Police Department");
+
+final TextEditingController _rankController =
+    TextEditingController(text: "Sub Inspector");
+
+final TextEditingController _badgeController =
+    TextEditingController(text: "B-1029");
+
+final TextEditingController _serviceIdController =
+    TextEditingController(text: "SERV-2026-001");
+
+final TextEditingController _stationController =
+    TextEditingController(text: "Rawalpindi City Station");
+
+final TextEditingController _joiningDateController =
+    TextEditingController(text: "2020-06-01");
 
   // Files storage
-  final Map<String, XFile?> _files = {
+  final Map<String, File?> _files = {
     'scannedCNIC': null,
     'fireIDCardFront': null,
     'fireIDCardBack': null,
@@ -44,7 +73,7 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
       final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
       if (file != null) {
         setState(() {
-          _files[fileType] = file;
+          _files[fileType] = File(file.path);
         });
         _showMessage('Success', 'File uploaded successfully ✅');
       }
@@ -65,10 +94,7 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        contentTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-        ),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -82,32 +108,54 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
     );
   }
 
-  void _register() {
+  // In FireBrigadeSignupScreen
+  final FirestoreService _firestoreService = FirestoreService();
+  bool _isLoading = false;
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
-      // Collect all user data
-      final userData = {
-        'name': _nameController.text.trim(),
-        'fatherName': _fatherNameController.text.trim(),
-        'dateOfBirth': _dobController.text.trim(),
-        'cnic': _cnicController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim(),
-        'department': _departmentController.text.trim(),
-        'rank': _rankController.text.trim(),
-        'badgeNumber': _badgeController.text.trim(),
-        'serviceId': _serviceIdController.text.trim(),
-        'station': _stationController.text.trim(),
-        'joiningDate': _joiningDateController.text.trim(),
-        'role': 'FIRE OFFICER',
-      };
+      setState(() => _isLoading = true);
 
-      // Navigate to FireBrigadeDashboard with user data
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => FireBrigadeDashboard(userData: userData),
-        ),
-      );
+      try {
+        // Collect all user data
+        final userData = {
+          'name': _nameController.text.trim(),
+          'fatherName': _fatherNameController.text.trim(),
+          'dateOfBirth': _dobController.text.trim(),
+          'cnic': _cnicController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(), // Add password
+          'department': _departmentController.text.trim(),
+          'rank': _rankController.text.trim(),
+          'badgeNumber': _badgeController.text.trim(),
+          'serviceId': _serviceIdController.text.trim(),
+          'station': _stationController.text.trim(),
+          'joiningDate': _joiningDateController.text.trim(),
+          'role': 'FIRE OFFICER',
+        };
+
+        // Register using FirestoreService
+        await _firestoreService.registerFireOfficer(userData, _files);
+
+        // Show success message
+        _showMessage(
+          'Success',
+          'Registration successful! Please wait for admin approval.',
+        );
+
+        // Navigate to login after 2 seconds
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        });
+      } catch (e) {
+        _showMessage('Error', e.toString());
+      } finally {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -121,7 +169,8 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
 
     if (picked != null) {
       setState(() {
-        controller.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        controller.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
       });
     }
   }
@@ -136,7 +185,8 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
 
     DateTime today = DateTime.now();
     int age = today.year - birthYear;
-    if (today.month < birthMonth || (today.month == birthMonth && today.day < birthDay)) {
+    if (today.month < birthMonth ||
+        (today.month == birthMonth && today.day < birthDay)) {
       age--;
     }
     return age;
@@ -150,11 +200,7 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.black,
-              Color(0xFF0A0E21),
-              Color(0xFF1A1A2E),
-            ],
+            colors: [Colors.black, Color(0xFF0A0E21), Color(0xFF1A1A2E)],
           ),
         ),
         child: SingleChildScrollView(
@@ -162,7 +208,10 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
             children: [
               Container(
                 margin: const EdgeInsets.only(top: 40, left: 20, right: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -347,7 +396,9 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
                           if (!RegExp(r'(?=.*[0-9])').hasMatch(value)) {
                             return 'Password must contain at least one number (0-9)';
                           }
-                          if (!RegExp(r'(?=.*[!@#$%^&*(),.?":{}|<>])').hasMatch(value)) {
+                          if (!RegExp(
+                            r'(?=.*[!@#$%^&*(),.?":{}|<>])',
+                          ).hasMatch(value)) {
                             return 'Password must contain at least one special character (!@#\$%^&*)';
                           }
                           return null;
@@ -489,33 +540,66 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
 
                       const SizedBox(height: 20),
 
-                      _buildFileUploadCard('Scanned CNIC', 'scannedCNIC', Icons.credit_card),
-                      _buildFileUploadCard('Fire Brigade ID Card (Front)', 'fireIDCardFront', Icons.badge),
-                      _buildFileUploadCard('Fire Brigade ID Card (Back)', 'fireIDCardBack', Icons.badge),
-                      _buildFileUploadCard('Appointment/Service Letter', 'appointmentLetter', Icons.description),
-                      _buildFileUploadCard('Recent Photograph', 'recentPhotograph', Icons.camera_alt),
+                      _buildFileUploadCard(
+                        'Scanned CNIC',
+                        'scannedCNIC',
+                        Icons.credit_card,
+                      ),
+                      _buildFileUploadCard(
+                        'Fire Brigade ID Card (Front)',
+                        'fireIDCardFront',
+                        Icons.badge,
+                      ),
+                      _buildFileUploadCard(
+                        'Fire Brigade ID Card (Back)',
+                        'fireIDCardBack',
+                        Icons.badge,
+                      ),
+                      _buildFileUploadCard(
+                        'Appointment/Service Letter',
+                        'appointmentLetter',
+                        Icons.description,
+                      ),
+                      _buildFileUploadCard(
+                        'Recent Photograph',
+                        'recentPhotograph',
+                        Icons.camera_alt,
+                      ),
 
                       const SizedBox(height: 40),
 
                       Center(
                         child: ElevatedButton(
-                          onPressed: _register,
+                          onPressed: _isLoading ? null : _register,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepOrange,
+                            backgroundColor: Colors
+                                .deepOrange, // Change color as per your theme
                             foregroundColor: Colors.white,
-                            minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
+                            minimumSize: Size(
+                              MediaQuery.of(context).size.width * 0.6,
+                              50,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
                             elevation: 5,
                           ),
-                          child: const Text(
-                            'REGISTER',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'REGISTER',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
 
@@ -581,30 +665,27 @@ class _FireBrigadeSignupScreenState extends State<FireBrigadeSignupScreen> {
           isUploaded ? Icons.check_circle : icon,
           color: isUploaded ? Colors.green : Colors.deepOrange,
         ),
-        title: Text(
-          title,
-          style: const TextStyle(color: Colors.white),
-        ),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
         subtitle: isUploaded
             ? Text(
-          fileName,
-          style: const TextStyle(color: Colors.green),
-          overflow: TextOverflow.ellipsis,
-        )
+                fileName,
+                style: const TextStyle(color: Colors.green),
+                overflow: TextOverflow.ellipsis,
+              )
             : const Text(
-          'Tap to upload image',
-          style: TextStyle(color: Colors.white70),
-        ),
+                'Tap to upload image',
+                style: TextStyle(color: Colors.white70),
+              ),
         trailing: isUploaded
             ? IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () {
-            setState(() {
-              _files[fileKey] = null;
-            });
-            _showMessage('Deleted', 'File removed successfully');
-          },
-        )
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () {
+                  setState(() {
+                    _files[fileKey] = null;
+                  });
+                  _showMessage('Deleted', 'File removed successfully');
+                },
+              )
             : null,
         onTap: () => _pickFile(fileKey),
       ),

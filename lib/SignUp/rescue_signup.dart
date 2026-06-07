@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:disaster_watch/service/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -31,7 +32,7 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
   final TextEditingController _joiningDateController = TextEditingController();
 
   // Files storage
-  final Map<String, XFile?> _files = {
+   final Map<String, File?> _files = {
     'scannedCNIC': null,
     'rescueIDCardFront': null,
     'rescueIDCardBack': null,
@@ -44,7 +45,7 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
       final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
       if (file != null) {
         setState(() {
-          _files[fileType] = file;
+          _files[fileType] = File(file.path);
         });
         _showMessage('Success', 'File uploaded successfully ✅');
       }
@@ -82,8 +83,15 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
     );
   }
 
-  void _register() {
-    if (_formKey.currentState!.validate()) {
+// In RescueSignupScreen
+final FirestoreService _firestoreService = FirestoreService();
+bool _isLoading = false;
+
+Future<void> _register() async {
+  if (_formKey.currentState!.validate()) {
+    setState(() => _isLoading = true);
+    
+    try {
       // Collect all user data
       final userData = {
         'name': _nameController.text.trim(),
@@ -92,6 +100,7 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
         'cnic': _cnicController.text.trim(),
         'phone': _phoneController.text.trim(),
         'email': _emailController.text.trim(),
+        'password': _passwordController.text.trim(), // Add password
         'department': _departmentController.text.trim(),
         'rank': _rankController.text.trim(),
         'badgeNumber': _badgeController.text.trim(),
@@ -101,15 +110,24 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
         'role': 'RESCUE OFFICER',
       };
 
-      // Navigate to RescueDashboard with user data
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => RescueDashboard(userData: userData),
-        ),
-      );
+      // Register using FirestoreService
+      await _firestoreService.registerRescueOfficer(userData, _files);
+      
+      // Show success message
+      _showMessage('Success', 'Registration successful! Please wait for admin approval.');
+      
+      // Navigate to login after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      });
+    } catch (e) {
+      _showMessage('Error', e.toString(),);
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
+}
+
 
   Future<void> _selectDate(TextEditingController controller) async {
     final DateTime? picked = await showDatePicker(
@@ -499,25 +517,33 @@ class _RescueSignupScreenState extends State<RescueSignupScreen> {
 
                       Center(
                         child: ElevatedButton(
-                          onPressed: _register,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            elevation: 5,
-                          ),
-                          child: const Text(
-                            'REGISTER',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
+  onPressed: _isLoading ? null : _register,
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.deepOrange, // Change color as per your theme
+    foregroundColor: Colors.white,
+    minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(15),
+    ),
+    elevation: 5,
+  ),
+  child: _isLoading
+      ? const SizedBox(
+          height: 20,
+          width: 20,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2,
+          ),
+        )
+      : const Text(
+          'REGISTER',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+),    ),
 
                       const SizedBox(height: 20),
                     ],
