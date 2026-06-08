@@ -16,21 +16,48 @@ class _PoliceSignupScreenState extends State<PoliceSignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _fatherNameController = TextEditingController();
-  final TextEditingController _dobController = TextEditingController();
-  final TextEditingController _cnicController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
-  final TextEditingController _departmentController = TextEditingController();
-  final TextEditingController _rankController = TextEditingController();
-  final TextEditingController _badgeController = TextEditingController();
-  final TextEditingController _serviceIdController = TextEditingController();
-  final TextEditingController _stationController = TextEditingController();
-  final TextEditingController _joiningDateController = TextEditingController();
+final TextEditingController _nameController =
+    TextEditingController(text: "Maryam Malik");
+
+final TextEditingController _fatherNameController =
+    TextEditingController(text: "Zaheer Malik");
+
+final TextEditingController _dobController =
+    TextEditingController(text: "01-01-1995");
+
+final TextEditingController _cnicController =
+    TextEditingController(text: "3520112345671");
+
+final TextEditingController _phoneController =
+    TextEditingController(text: "+923001234567");
+
+final TextEditingController _emailController =
+    TextEditingController(text: "maryampunjab@punjabpolice.gov.pk");
+
+final TextEditingController _passwordController =
+    TextEditingController(text: "Younis@ns2828");
+
+final TextEditingController _confirmPasswordController =
+    TextEditingController(text: "Younis@ns2828");
+
+final TextEditingController _departmentController =
+    TextEditingController(text: "IT Department");
+
+final TextEditingController _rankController =
+    TextEditingController(text: "Senior Developer");
+
+final TextEditingController _badgeController =
+    TextEditingController(text: "BD-1024");
+
+final TextEditingController _serviceIdController =
+    TextEditingController(text: "SRV-7788");
+
+final TextEditingController _stationController =
+    TextEditingController(text: "Rawalpindi");
+
+final TextEditingController _joiningDateController =
+    TextEditingController(text: "08-06-2024");
+
 
   // Files storage
   final Map<String, File?> _files = {

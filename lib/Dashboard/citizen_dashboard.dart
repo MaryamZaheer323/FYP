@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:disaster_watch/Dashboard/document_preview_screen.dart';
+import 'package:disaster_watch/reports/citizen_report_history.dart';
 import 'package:flutter/material.dart';
 import '../Citizens Pages/report_incident.dart';
 import '../Citizens Pages/editprofile.dart';
@@ -173,12 +174,18 @@ class _CitizenDashboardState extends State<CitizenDashboard>
                 Navigator.pop(context);
               },
             ),
+            // In your drawer or wherever you want to add the history button
             _buildDrawerItem(
               icon: Icons.history,
               title: 'Report History',
               onTap: () {
-                _showMessage(context, 'Report History clicked');
-                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ReportHistoryScreen(userData: userData),
+                  ),
+                );
               },
             ),
           ]),
@@ -236,7 +243,7 @@ class _CitizenDashboardState extends State<CitizenDashboard>
                 );
               },
             ),
-               _buildDrawerItem(
+            _buildDrawerItem(
               icon: Icons.info,
               title: 'Document',
               onTap: () {
@@ -270,7 +277,7 @@ class _CitizenDashboardState extends State<CitizenDashboard>
                 );
               },
             ),
-         
+
             _buildDrawerItem(
               icon: Icons.info,
               title: 'About App',
@@ -279,8 +286,6 @@ class _CitizenDashboardState extends State<CitizenDashboard>
                 Navigator.pop(context);
               },
             ),
-         
-         
           ]),
           const SizedBox(height: 20),
           Padding(
@@ -463,10 +468,15 @@ class _HomeTab extends StatelessWidget {
     );
   }
 
+  // In CitizenDashboard class, find or add this method:
   void _navigateToReportIncident(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const ReportIncidentScreen()),
+      MaterialPageRoute(
+        builder: (context) => ReportIncidentScreen(
+          userData: userData, // Pass the userData from dashboard
+        ),
+      ),
     );
   }
 
@@ -1008,7 +1018,8 @@ class _ReportTab extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ReportIncidentScreen(),
+                  builder: (context) =>
+                      ReportIncidentScreen(userData: userData),
                 ),
               );
             },

@@ -1,10 +1,14 @@
+ 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReportIncidentScreen extends StatefulWidget {
-  const ReportIncidentScreen({super.key});
+final Map<String, dynamic> userData; 
+  
+  const ReportIncidentScreen({super.key, required this.userData});
 
   @override
   State<ReportIncidentScreen> createState() => _ReportIncidentScreenState();
@@ -12,20 +16,26 @@ class ReportIncidentScreen extends StatefulWidget {
 
 class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
   final ImagePicker _picker = ImagePicker();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _peopleController = TextEditingController();
 
   List<XFile> _images = [];
+  String? _selectedDepartment;
   String? _selectedType;
   bool _isLiveLocationEnabled = false;
   double? _latitude;
   double? _longitude;
   bool _isGettingLocation = false;
+  bool _isSubmitting = false;
 
-  // Multiple selection for departments
-  List<String> _selectedDepartments = [];
-  final List<String> _departments = ['Police', 'Traffic Police', 'Fire Brigade', 'Rescue Service'];
+  final List<String> _departments = [
+    'Police',
+    'Traffic Police', 
+    'Fire Brigade',
+    'Rescue Service'
+  ];
 
   final List<String> _incidentTypes = [
     'Fire',
@@ -69,7 +79,6 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
 
   Future<void> _toggleLiveLocation() async {
     if (!_isLiveLocationEnabled) {
-      // Check and request location permissions
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _showMessage('Location Error', 'Please enable location services', isError: true);
@@ -123,47 +132,31 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
   }
 
   Future<void> _pickImages() async {
+    if (_images.length >= 3) {
+      _showMessage('Limit Reached', 'You can only upload maximum 3 images', isError: true);
+      return;
+    }
+    
     try {
       final List<XFile>? images = await _picker.pickMultiImage();
       if (images != null && images.isNotEmpty) {
+        int remainingSlots = 3 - _images.length;
+        int imagesToAdd = images.length > remainingSlots ? remainingSlots : images.length;
+        
         setState(() {
-          _images.addAll(images);
+          _images.addAll(images.take(imagesToAdd));
         });
-        _showMessage('Success', '${images.length} images added');
+        _showMessage('Success', '$imagesToAdd images added (Max 3)');
       }
     } catch (e) {
       _showMessage('Error', 'Failed to pick images: $e', isError: true);
     }
   }
 
-  void _toggleDepartment(String department) {
-    setState(() {
-      if (_selectedDepartments.contains(department)) {
-        _selectedDepartments.remove(department);
-      } else {
-        _selectedDepartments.add(department);
-      }
-    });
-  }
-
-  void _clearFormData() {
-    setState(() {
-      _descriptionController.clear();
-      _peopleController.clear();
-      _selectedDepartments.clear();
-      _selectedType = null;
-      _images.clear();
-      _isLiveLocationEnabled = false;
-      _latitude = null;
-      _longitude = null;
-    });
-    _showMessage('Form Cleared', 'All form data has been cleared');
-  }
-
-  void _submitReport() {
+  Future<void> _submitReport() async {
     // Validation
-    if (_selectedDepartments.isEmpty) {
-      _showMessage('Error', 'Please select at least one target department', isError: true);
+    if (_selectedDepartment == null) {
+      _showMessage('Error', 'Please select a target department', isError: true);
       return;
     }
 
@@ -182,31 +175,100 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
       return;
     }
 
-    // Prepare report data
-    final reportData = {
-      'departments': _selectedDepartments,
-      'type': _selectedType,
-      'description': _descriptionController.text.trim(),
-      'affectedPeople': _peopleController.text.trim().isEmpty ? 0 : int.parse(_peopleController.text.trim()),
-      'location': '$_latitude, $_longitude',
-      'latitude': _latitude,
-      'longitude': _longitude,
-      'images': _images.length,
-      'timestamp': DateTime.now().toString(),
-    };
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    // Success message with details
-    String departmentsList = _selectedDepartments.join(', ');
-    _showMessage('Success',
-        'Report submitted successfully!\n\n'
-            'Department: $departmentsList\n'
-            'Type: $_selectedType\n'
-            'Location: ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}\n'
-            'Images: ${_images.length}'
-    );
+    try {
+      // Prepare image paths (convert XFile to paths)
+      List<String> imagePaths = _images.map((img) => img.path).toList();
+      
+      // Prepare report data
+      final reportData = {
+        'citizenName': widget.userData['name'] ?? 'Unknown',
+        'citizenEmail': widget.userData['email'] ?? '',
+        'citizenCNIC': widget.userData['cnic'] ?? '',
+        'citizenPhone': widget.userData['phone'] ?? '',
+        'department': _selectedDepartment,
+        'type': _selectedType,
+        'description': _descriptionController.text.trim(),
+        'affectedPeople': _peopleController.text.trim().isEmpty ? 0 : int.parse(_peopleController.text.trim()),
+        'latitude': _latitude,
+        'longitude': _longitude,
+        'location': '${_latitude!.toStringAsFixed(6)}, ${_longitude!.toStringAsFixed(6)}',
+        'images': imagePaths,
+        'imageCount': imagePaths.length,
+        'status': 'pending', // pending, in-progress, resolved, rejected
+        'timestamp': FieldValue.serverTimestamp(),
+        'createdAt': DateTime.now().toIso8601String(),
+        'reportId': '',
+      };
 
-    // Clear form after successful submission
-    _clearFormData();
+      // Add to Firestore based on selected department
+      DocumentReference docRef;
+      switch (_selectedDepartment) {
+        case 'Police':
+          docRef = await _firestore.collection('police_reports').add(reportData);
+          break;
+        case 'Traffic Police':
+          docRef = await _firestore.collection('traffic_reports').add(reportData);
+          break;
+        case 'Fire Brigade':
+          docRef = await _firestore.collection('fire_reports').add(reportData);
+          break;
+        case 'Rescue Service':
+          docRef = await _firestore.collection('rescue_reports').add(reportData);
+          break;
+        default:
+          docRef = await _firestore.collection('general_reports').add(reportData);
+      }
+      
+      // Update report with ID
+      await docRef.update({'reportId': docRef.id});
+      
+      // Also add to citizen's personal reports collection
+      await _firestore.collection('citizen_reports').add({
+        ...reportData,
+        'citizenId': widget.userData['email'],
+        'reportRef': docRef.path,
+      });
+
+      _showMessage('Success',
+          'Report submitted successfully to $_selectedDepartment!\n\n'
+          'Report ID: ${docRef.id}\n'
+          'Type: $_selectedType\n'
+          'Location: ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}\n'
+          'Images: ${_images.length}'
+      );
+
+      // Clear form after successful submission
+      _clearFormData();
+      
+      // Navigate back after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        Navigator.pop(context);
+      });
+      
+    } catch (e) {
+      _showMessage('Error', 'Failed to submit report: $e', isError: true);
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  void _clearFormData() {
+    setState(() {
+      _descriptionController.clear();
+      _peopleController.clear();
+      _selectedDepartment = null;
+      _selectedType = null;
+      _images.clear();
+      _isLiveLocationEnabled = false;
+      _latitude = null;
+      _longitude = null;
+    });
   }
 
   @override
@@ -231,378 +293,375 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
             ],
           ),
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Header with Back Button
-              _GlassContainer(
-                margin: const EdgeInsets.only(top: 40, left: 20, right: 20),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Report Incident',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Main Form Container
-              _GlassContainer(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Incident Details',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Target Department - Multi-select Checkboxes
-                    const Text(
-                      'Target Department (Select one or more)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white.withOpacity(0.1),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        children: _departments.map((department) {
-                          return CheckboxListTile(
-                            value: _selectedDepartments.contains(department),
-                            onChanged: (bool? value) {
-                              _toggleDepartment(department);
-                            },
-                            title: Text(
-                              department,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            activeColor: Colors.purple,
-                            checkColor: Colors.purple,
-                            controlAffinity: ListTileControlAffinity.leading,
-                          );
-                        }).toList(),
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // Incident Type Dropdown
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white.withOpacity(0.1),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedType,
-                          hint: const Text(
-                            'Select Incident Type',
-                            style: TextStyle(color: Colors.white70),
+        child: Stack(
+          children: [
+            SingleChildScrollView(
+              child: Column(
+                children: [
+                  _GlassContainer(
+                    margin: const EdgeInsets.only(top: 40, left: 20, right: 20),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Report Incident',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                          isExpanded: true,
-                          style: const TextStyle(color: Colors.white),
-                          dropdownColor: const Color(0xFF1A1A2E),
-                          onChanged: (String? value) {
-                            setState(() {
-                              _selectedType = value;
-                            });
-                          },
-                          items: _incidentTypes.map((String type) {
-                            return DropdownMenuItem<String>(
-                              value: type,
-                              child: Text(type),
-                            );
-                          }).toList(),
                         ),
-                      ),
+                      ],
                     ),
-
-                    const SizedBox(height: 15),
-
-                    // Description
-                    TextField(
-                      controller: _descriptionController,
-                      style: const TextStyle(color: Colors.white),
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        labelText: 'Description',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.1),
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // Live Location Toggle
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white.withOpacity(0.1),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              if (_isGettingLocation)
-                                const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              else
-                                Icon(
-                                  _isLiveLocationEnabled ? Icons.gps_fixed : Icons.gps_off,
-                                  color: _isLiveLocationEnabled ? Colors.green : Colors.red,
-                                  size: 24,
-                                ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Live Location',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (_isLiveLocationEnabled && _latitude != null)
-                                    Text(
-                                      'Lat: ${_latitude!.toStringAsFixed(4)}, Lng: ${_longitude!.toStringAsFixed(4)}',
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  if (_isLiveLocationEnabled && _latitude == null && !_isGettingLocation)
-                                    const Text(
-                                      'Waiting for location...',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  if (_isGettingLocation)
-                                    const Text(
-                                      'Getting location...',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          Switch(
-                            value: _isLiveLocationEnabled,
-                            onChanged: (value) => _toggleLiveLocation(),
-                            activeColor: Colors.green,
-                            inactiveThumbColor: Colors.red,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // Affected People
-                    TextField(
-                      controller: _peopleController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Number of Affected People',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        prefixIcon: const Icon(Icons.people, color: Colors.green),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.1),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        hintText: 'Optional',
-                        hintStyle: const TextStyle(color: Colors.white30),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-
-                    const SizedBox(height: 30),
-                    const Divider(color: Colors.white30),
-                    const SizedBox(height: 20),
-
-                    // Images Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ),
+                  _GlassContainer(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Upload Images',
+                          'Incident Details',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        TextButton.icon(
-                          onPressed: _pickImages,
-                          icon: const Icon(Icons.add_photo_alternate, color: Colors.blueAccent),
-                          label: const Text(
-                            'Add Photos',
-                            style: TextStyle(color: Colors.blueAccent),
+                        const SizedBox(height: 20),
+
+                        // Target Department - Dropdown (Single Selection)
+                        const Text(
+                          'Target Department',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70,
                           ),
                         ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Image Grid
-                    if (_images.isNotEmpty)
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                        ),
-                        itemCount: _images.length,
-                        itemBuilder: (context, index) {
-                          return Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.file(
-                                  File(_images[index].path),
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.1),
+                            border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedDepartment,
+                              hint: const Text(
+                                'Select Department',
+                                style: TextStyle(color: Colors.white70),
                               ),
-                              Positioned(
-                                top: 5,
-                                right: 5,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _images.removeAt(index);
-                                    });
-                                    _showMessage('Deleted', 'Image removed');
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.5),
-                                      shape: BoxShape.circle,
+                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                              isExpanded: true,
+                              style: const TextStyle(color: Colors.white),
+                              dropdownColor: const Color(0xFF1A1A2E),
+                              onChanged: (String? value) {
+                                setState(() {
+                                  _selectedDepartment = value;
+                                });
+                              },
+                              items: _departments.map((String dept) {
+                                return DropdownMenuItem<String>(
+                                  value: dept,
+                                  child: Text(dept),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // Incident Type Dropdown
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.1),
+                            border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedType,
+                              hint: const Text(
+                                'Select Incident Type',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                              isExpanded: true,
+                              style: const TextStyle(color: Colors.white),
+                              dropdownColor: const Color(0xFF1A1A2E),
+                              onChanged: (String? value) {
+                                setState(() {
+                                  _selectedType = value;
+                                });
+                              },
+                              items: _incidentTypes.map((String type) {
+                                return DropdownMenuItem<String>(
+                                  value: type,
+                                  child: Text(type),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // Description
+                        TextField(
+                          controller: _descriptionController,
+                          style: const TextStyle(color: Colors.white),
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            labelText: 'Description',
+                            labelStyle: const TextStyle(color: Colors.white70),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.1),
+                            contentPadding: const EdgeInsets.all(16),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // Live Location Toggle
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.1),
+                            border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  if (_isGettingLocation)
+                                    const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  else
+                                    Icon(
+                                      _isLiveLocationEnabled ? Icons.gps_fixed : Icons.gps_off,
+                                      color: _isLiveLocationEnabled ? Colors.green : Colors.red,
+                                      size: 24,
                                     ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Live Location',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (_isLiveLocationEnabled && _latitude != null)
+                                        Text(
+                                          'Lat: ${_latitude!.toStringAsFixed(4)}, Lng: ${_longitude!.toStringAsFixed(4)}',
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                ),
+                                ],
+                              ),
+                              Switch(
+                                value: _isLiveLocationEnabled,
+                                onChanged: (value) => _toggleLiveLocation(),
+                                activeColor: Colors.green,
+                                inactiveThumbColor: Colors.red,
                               ),
                             ],
-                          );
-                        },
-                      ),
-
-                    const SizedBox(height: 20),
-
-                    // Clear Form Button
-                    Center(
-                      child: TextButton(
-                        onPressed: _clearFormData,
-                        child: const Text(
-                          'Clear Form',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: 14,
                           ),
                         ),
-                      ),
+
+                        const SizedBox(height: 15),
+
+                        // Affected People
+                        TextField(
+                          controller: _peopleController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Number of Affected People',
+                            labelStyle: const TextStyle(color: Colors.white70),
+                            prefixIcon: const Icon(Icons.people, color: Colors.green),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.1),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                            hintText: 'Optional',
+                            hintStyle: const TextStyle(color: Colors.white30),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+
+                        const SizedBox(height: 30),
+                        const Divider(color: Colors.white30),
+                        const SizedBox(height: 20),
+
+                        // Images Section
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Upload Images',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  '${_images.length}/3 images selected',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            TextButton.icon(
+                              onPressed: _images.length >= 3 ? null : _pickImages,
+                              icon: const Icon(Icons.add_photo_alternate, color: Colors.blueAccent),
+                              label: Text(
+                                _images.length >= 3 ? 'Max Reached' : 'Add Photos',
+                                style: TextStyle(
+                                  color: _images.length >= 3 ? Colors.grey : Colors.blueAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Image Grid
+                        if (_images.isNotEmpty)
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 8,
+                              mainAxisSpacing: 8,
+                            ),
+                            itemCount: _images.length,
+                            itemBuilder: (context, index) {
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.file(
+                                      File(_images[index].path),
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 5,
+                                    right: 5,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _images.removeAt(index);
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.5),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+
+                        const SizedBox(height: 20),
+
+                        // Submit Button
+                        Center(
+                          child: ElevatedButton(
+                            onPressed: _isSubmitting ? null : _submitReport,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              elevation: 5,
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'SUBMIT REPORT',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+                      ],
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // Submit Button
-                    Center(
-                      child: ElevatedButton(
-                        onPressed: _submitReport,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          foregroundColor: Colors.white,
-                          minimumSize: Size(MediaQuery.of(context).size.width * 0.6, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          elevation: 5,
-                        ),
-                        child: const Text(
-                          'SUBMIT REPORT',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// Glass Container Widget
 class _GlassContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? margin;
