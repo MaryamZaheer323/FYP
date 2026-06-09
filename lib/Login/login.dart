@@ -357,8 +357,10 @@
 // }
 
 // lib/screens/login_screen.dart
+
+import 'package:disaster_watch/Dashboard/dashboard_screen.dart';
 import 'package:disaster_watch/service/firestore_service.dart';
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import '../Dashboard/police_dashboard.dart';
 import '../Dashboard/traffic_police_dashboard.dart';
 import '../Dashboard/rescue_dashboard.dart';
@@ -374,8 +376,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController(text: "maryam@gmail.com");
-  final TextEditingController _passwordController = TextEditingController(text: "Younis@ns2828");
+  final TextEditingController _emailController = TextEditingController(
+    text: "maryamtraffic@trafficpolice.gov.pk",
+  );
+  final TextEditingController _passwordController = TextEditingController(
+    text: "Younis@ns2828",
+  );
   final FirestoreService _firestoreService = FirestoreService();
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -393,23 +399,47 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final user = await _firestoreService.loginUser(email, password);
-      
+
       // Navigate to respective dashboard based on role
       switch (user['role']) {
         case 'CITIZEN':
           _navigateToDashboard(CitizenDashboard(userData: user['data']));
           break;
         case 'POLICE OFFICER':
-          _navigateToDashboard(PoliceDashboard(userData: user['data']));
+          _navigateToDashboard(
+            PoliceDepartmentDashboardScreen(
+              department: 'Police',
+              departmentColor: "",
+              departmentIcon: Icons.gavel,
+              collectionName: 'police_reports',
+            ),
+          );
           break;
         case 'FIRE OFFICER':
-          _navigateToDashboard(FireBrigadeDashboard(userData: user['data']));
+          _navigateToDashboard(
+            FireBrigadeDepartmentDashboardScreen(
+              department: 'Fire Brigade',
+              departmentColor: "",
+              departmentIcon: Icons.local_fire_department,
+              collectionName: 'fire_reports',
+            )
+          );
           break;
         case 'RESCUE OFFICER':
-          _navigateToDashboard(RescueDashboard(userData: user['data']));
+          _navigateToDashboard(RescueDepartmentDashboardScreen(
+            department: 'Rescue',
+            departmentColor: "",
+            departmentIcon: Icons.local_hospital,
+            collectionName: 'rescue_reports',
+          ));
           break;
         case 'TRAFFIC OFFICER':
-          _navigateToDashboard(TrafficPoliceDashboard(userData: user['data']));
+          _navigateToDashboard(TrafficPoliceDepartmentDashboardScreen(
+            department: 'Traffic Police',
+            departmentColor: "",
+            departmentIcon: Icons.directions_car,
+            collectionName: 'traffic_reports',
+          ));
           break;
         default:
           _showErrorDialog('Invalid user role');
@@ -440,17 +470,11 @@ class _LoginScreenState extends State<LoginScreen> {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        contentTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-        ),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'OK',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -493,11 +517,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const Column(
                     children: [
-                      Icon(
-                        Icons.apps,
-                        size: 80,
-                        color: Colors.blueAccent,
-                      ),
+                      Icon(Icons.apps, size: 80, color: Colors.blueAccent),
                       SizedBox(height: 10),
                       Text(
                         'Smart Disaster Response System',
@@ -548,7 +568,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                           color: Colors.white70,
                         ),
                         onPressed: () {
